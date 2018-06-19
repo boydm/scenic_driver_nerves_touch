@@ -13,7 +13,7 @@ defmodule Scenic.Driver.Nerves.Touch do
 
   require Logger
 
-  import IEx
+  # import IEx
 
   @port  '/scenic_driver_rpi_touch'
 
