@@ -8,7 +8,7 @@ defmodule Scenic.Driver.Nerves.Touch do
   use Scenic.ViewPort.Driver
   alias Scenic.Cache
   alias Scenic.ViewPort
-
+  alias :mnesia, as: Mnesia
   alias Scenic.Driver.RpiTouch
 
   require Logger
@@ -52,6 +52,22 @@ defmodule Scenic.Driver.Nerves.Touch do
         nil
     end
 
+    calibration = case config[:calibration] do
+      nil -> nil
+      {
+        {ax, bx, dx},
+        {ay, by, dy}
+      } = calib when
+      is_number(ax) and is_number(bx) and is_number(dx) and
+      is_number(ay) and is_number(by) and is_number(dy) -> calib
+      _ ->
+        msg = "Invalid touch calibration in driver config\r\n" <>
+          "Must be a tuple in the form of {{ax, bx, dx}, {ay, by, dy}}\r\n" <>
+          "See documentation for details"
+        Logger.error msg
+        nil
+    end
+
     state = %{
       device:       device,
       event_path:   nil,
@@ -63,15 +79,15 @@ defmodule Scenic.Driver.Nerves.Touch do
       mouse_x:      nil,
       mouse_y:      nil,
       mouse_event:  nil,
-      # config:       config
+      config:       config,
+      calibration:  calibration
     }
 
     {:ok, state }
   end
 
   #============================================================================
-  def handle_call( msg, from, state ), do: {:noreply, :e_no_impl, state}
-
+  def handle_call( msg, from, state ), do: {:reply, :e_no_impl, state}
 
   #============================================================================
 
@@ -95,8 +111,54 @@ defmodule Scenic.Driver.Nerves.Touch do
       event ->
         # start listening for input messages on the event file
         {:ok, pid} = InputEvent.start_link( event )
+        # start post-init calibration check
+        Process.send(self(), {:post_init, 20}, [])
         {:noreply, %{state | event_pid: pid, event_path: event}}
     end
+  end
+
+  #--------------------------------------------------------
+  # We have connected to the touch driver. See if there is a stored
+  # calibration override
+  def handle_info( {:post_init, 0}, state ), do: state
+  def handle_info( {:post_init, tries_left}, %{
+    viewport:     vp,
+    config:       config,
+    calibration:  calibration
+  } = state ) do
+    # if there ls a locally stored calibration record, use that instead of the
+    # default one that was passed into config. Measured beats default
+
+    # Find the static monitor. Try again later if there isn't one.
+    {:ok, %{drivers: drivers}} = ViewPort.query_status(vp)
+    state = Enum.find(drivers, fn
+      {_pid, %{type: "Static Monitor"}} -> true
+      _ -> false
+    end)
+    |> case do
+      nil ->
+        # not found. Try again later
+        Process.send_after(self(), {:post_init, tries_left - 1}, @init_retry_ms)
+        state
+
+      %{width: width, height: height} ->
+        Mnesia.start()
+        Mnesia.dirty_read({:touch_calibration, {width,height}})
+        |> case do
+          [] -> state
+          [{:touch_calibration, _, {{_,_,_},{_,_,_}} = calib}] ->
+            Map.put(state, :calibration, calib)
+          _ ->
+            # don't understand the stored calibration. Do nothing.
+            state
+        end
+
+      _ ->
+        # unknown monitor format. ignore it.
+        state
+    end
+
+    {:noreply, state}
   end
 
 
@@ -248,7 +310,8 @@ defmodule Scenic.Driver.Nerves.Touch do
     mouse_event: :mouse_down
   } = state ) when is_number(x) and is_number(y) do
 # IO.puts "MOUSE press: #{inspect({x,y})}"
-    ViewPort.input(viewport, {:cursor_button, {:left, :press, 0, {x,y}}})    
+    pos = project_pos({x,y}, state)
+    ViewPort.input(viewport, {:cursor_button, {:left, :press, 0, pos}})    
     %{state | mouse_event: nil}
   end
 
@@ -260,7 +323,8 @@ defmodule Scenic.Driver.Nerves.Touch do
     mouse_event: :mouse_up} = state ) when
   is_number(x) and is_number(y) do
 # IO.puts "MOUSE release: #{inspect({x,y})}"
-    ViewPort.input(viewport, {:cursor_button, {:left, :release, 0, {x,y}}})
+    pos = project_pos({x,y}, state)
+    ViewPort.input(viewport, {:cursor_button, {:left, :release, 0, pos}})
     %{state | mouse_x: nil, mouse_y: nil, mouse_event: nil}
   end
 
@@ -272,7 +336,8 @@ defmodule Scenic.Driver.Nerves.Touch do
     mouse_event: :mouse_move} = state ) when
   is_number(x) and is_number(y) do
 # IO.puts "MOUSE move: #{inspect({x,y})}"
-    ViewPort.input(viewport, {:cursor_pos, {x,y}})
+    pos = project_pos({x,y}, state)
+    ViewPort.input(viewport, {:cursor_pos, pos})
     %{state | mouse_event: nil}
   end
 
@@ -287,4 +352,47 @@ defmodule Scenic.Driver.Nerves.Touch do
     state
   end
 
+
+
+  #--------------------------------------------------------
+  # project the measured x value by the calibration data to get the screen x
+  defp project_pos( {x, y}, %{calibration: {{ax, bx, dx}, {ay, by, dy}}} ) do
+    {
+      x * ax + y * bx + dx,
+      y * ay + x * by + dy
+    }
+  end
+  defp project_pos( pos, _ ), do: pos
+
 end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
