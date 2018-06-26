@@ -120,7 +120,7 @@ defmodule Scenic.Driver.Nerves.Touch do
   #--------------------------------------------------------
   # We have connected to the touch driver. See if there is a stored
   # calibration override
-  def handle_info( {:post_init, 0}, state ), do: state
+  def handle_info( {:post_init, 0}, state ), do: {:noreply, state}
   def handle_info( {:post_init, tries_left}, %{
     viewport:     vp,
     config:       config,
