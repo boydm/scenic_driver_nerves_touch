@@ -17,7 +17,7 @@ defmodule Scenic.Driver.Nerves.Touch do
 
   @port  '/scenic_driver_rpi_touch'
 
-  @init_retry_ms     100
+  @init_retry_ms     400
 
   #============================================================================
   # client callable api
