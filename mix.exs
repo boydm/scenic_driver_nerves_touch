@@ -4,7 +4,7 @@ defmodule ScenicDriverNervesTouch.MixProject do
   def project do
     [
       app: :scenic_driver_nerves_touch,
-      version: "0.1.0",
+      version: "0.7.0",
       package: package(),
       description: description(),
       elixir: "~> 1.6",
