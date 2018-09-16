@@ -29,10 +29,10 @@ defmodule Scenic.Driver.Nerves.Touch do
 
     IO.puts "====================================================================="
     IO.puts "====================================================================="
-    IO.puts "======================= Starting touch Driver abc ======================="
+    IO.puts "======================= Starting touch Driver def ======================="
     IO.puts "====================================================================="
     IO.puts "====================================================================="
-pry()
+
     device = case config[:device] do
       device when is_bitstring(device) ->
         Process.send(self(), {:init_driver, device}, [])
@@ -48,7 +48,7 @@ pry()
         Logger.error(msg)
         nil
     end
-pry()
+
     calibration = case config[:calibration] do
       nil -> nil
       {
@@ -64,7 +64,7 @@ pry()
         Logger.error msg
         nil
     end
-pry()
+
     state = %{
       device:       device,
       event_path:   nil,
@@ -80,7 +80,7 @@ pry()
       calibration:  calibration,
       screen_size: screen_size
     }
-pry()
+
     {:ok, state }
   end
 
@@ -114,6 +114,7 @@ pry()
         # start post-init calibration check
         Process.send(self(), :post_init, [])
         # Process.send(self(), {:post_init, 20}, [])
+pry()
         {:noreply, %{state | event_pid: pid, event_path: event}}
     end
   end
@@ -162,7 +163,7 @@ pry()
 #         state
 #     end
 
-
+pry()
     Mnesia.start()
     state = Mnesia.dirty_read({:touch_calibration, {width,height}})
     |> case do
@@ -173,7 +174,7 @@ pry()
         # don't understand the stored calibration. Do nothing.
         state
     end
-
+pry()
     {:noreply, state}
   end
 
