@@ -7,11 +7,11 @@
 defmodule Scenic.Driver.Nerves.Touch do
   use Scenic.ViewPort.Driver
   alias Scenic.ViewPort
-  alias :mnesia, as: Mnesia
+  # alias :mnesia, as: Mnesia
 
   require Logger
 
-  import IEx
+  # import IEx
 
   # @port  '/scenic_driver_rpi_touch'
 
@@ -28,9 +28,7 @@ defmodule Scenic.Driver.Nerves.Touch do
   def init( viewport, {_,_} = screen_size, config ) do
 
     IO.puts "====================================================================="
-    IO.puts "====================================================================="
-    IO.puts "======================= Starting touch Driver def ======================="
-    IO.puts "====================================================================="
+    IO.puts "======================= Starting touch Driver ======================="
     IO.puts "====================================================================="
 
     device = case config[:device] do
@@ -102,19 +100,17 @@ defmodule Scenic.Driver.Nerves.Touch do
     end)
     |> case do
       nil ->
-pry()
         Logger.warn("Device not found: #{inspect(device)}")
         # not found. Try again later
         Process.send_after(self(), {:init_driver, device}, @init_retry_ms)
         {:noreply, state}
       event ->
-pry()
         # start listening for input messages on the event file
         {:ok, pid} = InputEvent.start_link( event )
         # start post-init calibration check
-        Process.send(self(), :post_init, [])
+        # Process.send(self(), :post_init, [])
         # Process.send(self(), {:post_init, 20}, [])
-pry()
+
         {:noreply, %{state | event_pid: pid, event_path: event}}
     end
   end
@@ -123,12 +119,12 @@ pry()
   # We have connected to the touch driver. See if there is a stored
   # calibration override
   # def handle_info( {:post_init, 0}, state ), do: {:noreply, state}
-  def handle_info( :post_init, %{
+  # def handle_info( :post_init, %{
     # viewport:     vp,
     # config:       config,
     # calibration:  calibration,
     # screen_size: {width, height}
-  } = state ) do
+  # } = state ) do
     # if there ls a locally stored calibration record, use that instead of the
     # default one that was passed into config. Measured beats default
 
@@ -175,15 +171,15 @@ pry()
 #         state
 #     end
 # pry()
-    {:noreply, state}
-  end
+  #   {:noreply, state}
+  # end
 
 
   #--------------------------------------------------------
   # first handling for the input events we care about
   def handle_info( {:input_event, source, events}, %{event_path: event_path} = state ) when
   source == event_path do
-IO.inspect(events)
+# IO.inspect(events)
     state = Enum.reduce(events, state, fn(ev,s) ->
       ev_abs(ev,s)
       |> simulate_mouse( ev )
@@ -273,7 +269,7 @@ IO.inspect(events)
   # if other ev types need to be handled, add them here
 
   defp ev_abs( msg, state ) do
-    IO.puts "EV unhandled: #{inspect(msg)}"
+    # IO.puts "EV unhandled: #{inspect(msg)}"
     state
   end
 
