@@ -13,7 +13,7 @@ defmodule Scenic.Driver.Nerves.Touch do
 
   require Logger
 
-  # import IEx
+  import IEx
 
   @port  '/scenic_driver_rpi_touch'
 
@@ -31,11 +31,10 @@ defmodule Scenic.Driver.Nerves.Touch do
 
     IO.puts "====================================================================="
     IO.puts "====================================================================="
-    IO.puts "======================= Starting touch Driver ======================="
+    IO.puts "======================= Starting touch Driver abc ======================="
     IO.puts "====================================================================="
     IO.puts "====================================================================="
-
-    # set up the port args - enforce type checking
+pry()
     device = case config[:device] do
       device when is_bitstring(device) ->
         Process.send(self(), {:init_driver, device}, [])
@@ -51,7 +50,7 @@ defmodule Scenic.Driver.Nerves.Touch do
         Logger.error(msg)
         nil
     end
-
+pry()
     calibration = case config[:calibration] do
       nil -> nil
       {
@@ -67,7 +66,7 @@ defmodule Scenic.Driver.Nerves.Touch do
         Logger.error msg
         nil
     end
-
+pry()
     state = %{
       device:       device,
       event_path:   nil,
@@ -82,7 +81,7 @@ defmodule Scenic.Driver.Nerves.Touch do
       config:       config,
       calibration:  calibration
     }
-
+pry()
     {:ok, state }
   end
 
@@ -104,11 +103,13 @@ defmodule Scenic.Driver.Nerves.Touch do
     end)
     |> case do
       nil ->
+pry()
         Logger.warn("Device not found: #{inspect(device)}")
         # not found. Try again later
         Process.send_after(self(), {:init_driver, device}, @init_retry_ms)
         {:noreply, state}
       event ->
+pry()
         # start listening for input messages on the event file
         {:ok, pid} = InputEvent.start_link( event )
         # start post-init calibration check
@@ -138,10 +139,12 @@ defmodule Scenic.Driver.Nerves.Touch do
     |> case do
       nil ->
         # not found. Try again later
+IO.puts "try again later"
         Process.send_after(self(), {:post_init, tries_left - 1}, @init_retry_ms)
         state
 
       %{width: width, height: height} ->
+pry()
         Mnesia.start()
         Mnesia.dirty_read({:touch_calibration, {width,height}})
         |> case do
@@ -166,7 +169,7 @@ defmodule Scenic.Driver.Nerves.Touch do
   # first handling for the input events we care about
   def handle_info( {:input_event, source, events}, %{event_path: event_path} = state ) when
   source == event_path do
-    # IO.inspect(events)
+IO.inspect(events)
     state = Enum.reduce(events, state, fn(ev,s) ->
       ev_abs(ev,s)
       |> simulate_mouse( ev )
