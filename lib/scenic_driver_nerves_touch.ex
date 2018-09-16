@@ -127,7 +127,7 @@ pry()
     # viewport:     vp,
     # config:       config,
     # calibration:  calibration,
-    screen_size: {width, height}
+    # screen_size: {width, height}
   } = state ) do
     # if there ls a locally stored calibration record, use that instead of the
     # default one that was passed into config. Measured beats default
@@ -163,18 +163,18 @@ pry()
 #         state
 #     end
 
-pry()
-    Mnesia.start()
-    state = Mnesia.dirty_read({:touch_calibration, {width,height}})
-    |> case do
-      [] -> state
-      [{:touch_calibration, _, {{_,_,_},{_,_,_}} = calib}] ->
-        Map.put(state, :calibration, calib)
-      _ ->
-        # don't understand the stored calibration. Do nothing.
-        state
-    end
-pry()
+# pry()
+#     Mnesia.start()
+#     state = Mnesia.dirty_read({:touch_calibration, {width,height}})
+#     |> case do
+#       [] -> state
+#       [{:touch_calibration, _, {{_,_,_},{_,_,_}} = calib}] ->
+#         Map.put(state, :calibration, calib)
+#       _ ->
+#         # don't understand the stored calibration. Do nothing.
+#         state
+#     end
+# pry()
     {:noreply, state}
   end
 
