@@ -6,16 +6,14 @@
 #
 defmodule Scenic.Driver.Nerves.Touch do
   use Scenic.ViewPort.Driver
-  alias Scenic.Cache
   alias Scenic.ViewPort
   alias :mnesia, as: Mnesia
-  alias Scenic.Driver.RpiTouch
 
   require Logger
 
   import IEx
 
-  @port  '/scenic_driver_rpi_touch'
+  # @port  '/scenic_driver_rpi_touch'
 
   @init_retry_ms     400
 
@@ -87,7 +85,7 @@ pry()
   end
 
   #============================================================================
-  def handle_call( msg, from, state ), do: {:reply, :e_no_impl, state}
+  def handle_call( _msg, _from, state ), do: {:reply, :e_no_impl, state}
 
   #============================================================================
 
@@ -260,13 +258,13 @@ IO.inspect(events)
   end
 
   defp ev_abs( {:ev_key, :btn_touch, 1}, %{
-    slot: slot
+    slot: _slot
   } = state ) do
     %{state | touch: true}
   end
 
   defp ev_abs( {:ev_key, :btn_touch, 0}, %{
-    slot: slot
+    slot: _slot
   } = state ) do
     %{state | touch: false}
   end
@@ -274,7 +272,7 @@ IO.inspect(events)
   # if other ev types need to be handled, add them here
 
   defp ev_abs( msg, state ) do
-    # IO.puts "EV unhandled: #{inspect(msg)}"
+    IO.puts "EV unhandled: #{inspect(msg)}"
     state
   end
 
