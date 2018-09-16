@@ -27,7 +27,7 @@ defmodule Scenic.Driver.Nerves.Touch do
   #============================================================================
   # startup
 
-  def init( viewport, _, config ) do
+  def init( viewport, {_,_} = screen_size, config ) do
 
     IO.puts "====================================================================="
     IO.puts "====================================================================="
@@ -79,7 +79,8 @@ pry()
       mouse_y:      nil,
       mouse_event:  nil,
       config:       config,
-      calibration:  calibration
+      calibration:  calibration,
+      screen_size: screen_size
     }
 pry()
     {:ok, state }
@@ -113,7 +114,8 @@ pry()
         # start listening for input messages on the event file
         {:ok, pid} = InputEvent.start_link( event )
         # start post-init calibration check
-        Process.send(self(), {:post_init, 20}, [])
+        Process.send(self(), :post_init, [])
+        # Process.send(self(), {:post_init, 20}, [])
         {:noreply, %{state | event_pid: pid, event_path: event}}
     end
   end
@@ -121,43 +123,56 @@ pry()
   #--------------------------------------------------------
   # We have connected to the touch driver. See if there is a stored
   # calibration override
-  def handle_info( {:post_init, 0}, state ), do: {:noreply, state}
-  def handle_info( {:post_init, tries_left}, %{
-    viewport:     vp,
-    config:       config,
-    calibration:  calibration
+  # def handle_info( {:post_init, 0}, state ), do: {:noreply, state}
+  def handle_info( :post_init, %{
+    # viewport:     vp,
+    # config:       config,
+    # calibration:  calibration,
+    screen_size: {width, height}
   } = state ) do
     # if there ls a locally stored calibration record, use that instead of the
     # default one that was passed into config. Measured beats default
 
     # Find the static monitor. Try again later if there isn't one.
-    {:ok, %{drivers: drivers}} = ViewPort.query_status(vp)
-    state = Enum.find(drivers, fn
-      {_pid, %{type: "Static Monitor"}} -> true
-      _ -> false
-    end)
+#     {:ok, %{drivers: drivers}} = ViewPort.query_status(vp)
+#     state = Enum.find(drivers, fn
+#       {_pid, %{type: "Static Monitor"}} -> true
+#       _ -> false
+#     end)
+#     |> case do
+#       nil ->
+#         # not found. Try again later
+# IO.puts "try again later"
+#         Process.send_after(self(), {:post_init, tries_left - 1}, @init_retry_ms)
+#         state
+
+#       %{width: width, height: height} ->
+# pry()
+#         Mnesia.start()
+#         Mnesia.dirty_read({:touch_calibration, {width,height}})
+#         |> case do
+#           [] -> state
+#           [{:touch_calibration, _, {{_,_,_},{_,_,_}} = calib}] ->
+#             Map.put(state, :calibration, calib)
+#           _ ->
+#             # don't understand the stored calibration. Do nothing.
+#             state
+#         end
+
+#       _ ->
+#         # unknown monitor format. ignore it.
+#         state
+#     end
+
+
+    Mnesia.start()
+    state = Mnesia.dirty_read({:touch_calibration, {width,height}})
     |> case do
-      nil ->
-        # not found. Try again later
-IO.puts "try again later"
-        Process.send_after(self(), {:post_init, tries_left - 1}, @init_retry_ms)
-        state
-
-      %{width: width, height: height} ->
-pry()
-        Mnesia.start()
-        Mnesia.dirty_read({:touch_calibration, {width,height}})
-        |> case do
-          [] -> state
-          [{:touch_calibration, _, {{_,_,_},{_,_,_}} = calib}] ->
-            Map.put(state, :calibration, calib)
-          _ ->
-            # don't understand the stored calibration. Do nothing.
-            state
-        end
-
+      [] -> state
+      [{:touch_calibration, _, {{_,_,_},{_,_,_}} = calib}] ->
+        Map.put(state, :calibration, calib)
       _ ->
-        # unknown monitor format. ignore it.
+        # don't understand the stored calibration. Do nothing.
         state
     end
 
