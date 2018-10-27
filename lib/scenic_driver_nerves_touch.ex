@@ -306,7 +306,7 @@ defmodule Scenic.Driver.Nerves.Touch do
 
   # if other ev types need to be handled, add them here
 
-  defp ev_abs(msg, state) do
+  defp ev_abs( _msg, state ) do
     # IO.puts "EV unhandled: #{inspect(msg)}"
     state
   end
