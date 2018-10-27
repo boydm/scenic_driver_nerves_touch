@@ -23,7 +23,7 @@ defmodule ScenicDriverNervesTouch.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      { :input_event, "~> 0.2" },
+      { :input_event, "~> 0.3" },
       { :scenic, git: "git@github.com:boydm/scenic.git" }
     ]
   end
