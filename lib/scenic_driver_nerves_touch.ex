@@ -112,7 +112,7 @@ defmodule Scenic.Driver.Nerves.Touch do
     end)
     |> case do
       nil ->
-        Logger.warn("Device not found: #{inspect(device)}")
+        Logger.warn("Device not found: #{inspect(device_name)}")
         # not found. Try again later
         Process.send_after(self(), {:init_driver, device}, @init_retry_ms)
         {:noreply, state}
