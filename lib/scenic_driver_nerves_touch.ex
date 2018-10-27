@@ -92,11 +92,14 @@ defmodule Scenic.Driver.Nerves.Touch do
   # Enumerate the events/device pairs and look for the requested device.
   # If it is NOT found, log a warning and try again later (it might not be loaded yet)
   # If it is found, connect and start working for real
-  def handle_info( {:init_driver, device}, state ) do
+  def handle_info( {:init_driver, requested_device}, state ) do
     InputEvent.enumerate()
-    |> Enum.find_value(fn
-      {event, ^device} -> event
-      _ -> nil
+    |> Enum.find_value(fn({event, device_name}) ->
+      if device_name =~ requested_device do
+        event
+      else
+        nil
+      end
     end)
     |> case do
       nil ->
