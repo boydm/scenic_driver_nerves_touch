@@ -5,6 +5,9 @@
 #  track messages from a multi-touch driver, translate them, and send up to the viewport
 #
 defmodule Scenic.Driver.Nerves.Touch do
+  @moduledoc """
+  """
+
   use Scenic.ViewPort.Driver
   alias Scenic.ViewPort
   # alias :mnesia, as: Mnesia
@@ -26,10 +29,6 @@ defmodule Scenic.Driver.Nerves.Touch do
   # startup
 
   def init(viewport, {_, _} = screen_size, config) do
-    IO.puts("=====================================================================")
-    IO.puts("======================= Starting touch Driver =======================")
-    IO.puts("=====================================================================")
-
     device =
       case config[:device] do
         device when is_bitstring(device) ->
