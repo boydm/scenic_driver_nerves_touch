@@ -28,13 +28,14 @@ defmodule ScenicDriverNervesTouch.MixProject do
   defp deps do
     [
       {:input_event, "~> 0.3"},
-      {:scenic, "~> 0.9"}
+      {:scenic, "~> 0.9"},
+      {:ex_doc, "~> 0.19", only: [:dev, :test], runtime: false}
     ]
   end
 
   defp description() do
     """
-    Scenic.Driver.Nerves.Rpi - Scenic driver providing touch input for Nerves devices.
+    Scenic.Driver.Nerves.Touch - Scenic driver providing touch input for Nerves devices.
     """
   end
 
