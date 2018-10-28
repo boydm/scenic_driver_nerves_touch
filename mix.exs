@@ -24,7 +24,7 @@ defmodule ScenicDriverNervesTouch.MixProject do
   defp deps do
     [
       {:input_event, "~> 0.3"},
-      {:scenic, git: "git@github.com:boydm/scenic.git"}
+      {:scenic, "~> 0.9"}
     ]
   end
 
