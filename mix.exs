@@ -1,10 +1,14 @@
 defmodule ScenicDriverNervesTouch.MixProject do
   use Mix.Project
 
+  @app_name :scenic_driver_nerves_touch
+  @version "0.9.0"
+  @github "https://github.com/boydm/scenic_driver_nerves_rpi"
+
   def project do
     [
-      app: :scenic_driver_nerves_touch,
-      version: "0.9.0",
+      app: @app_name,
+      version: @version,
       package: package(),
       description: description(),
       elixir: "~> 1.6",
@@ -34,10 +38,13 @@ defmodule ScenicDriverNervesTouch.MixProject do
     """
   end
 
-  defp package() do
+  defp package do
     [
-      name: :scenic_driver_nerves_touch,
-      maintainers: ["Boyd Multerer"]
+      name: @app_name,
+      contributors: ["Boyd Multerer"],
+      maintainers: ["Boyd Multerer"],
+      licenses: ["Apache 2"],
+      links: %{Github: @github}
     ]
   end
 end
