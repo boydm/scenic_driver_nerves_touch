@@ -2,7 +2,7 @@ defmodule ScenicDriverNervesTouch.MixProject do
   use Mix.Project
 
   @app_name :scenic_driver_nerves_touch
-  @version "0.9.0"
+  @version "0.9.1"
   @github "https://github.com/boydm/scenic_driver_nerves_rpi"
 
   def project do
