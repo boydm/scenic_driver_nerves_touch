@@ -14,7 +14,7 @@ defmodule Scenic.Driver.Nerves.Touch do
   days for this driver. There will probably be changes in the future. Especially
   regarding multi-touch.
 
-  For now, the events coming to a scene via the touch driver look like the 
+  For now, the events coming to a scene via the touch driver look like the
   same cursor oriented events that come from glfw with a mouse.
 
   ## Installation
@@ -71,7 +71,7 @@ defmodule Scenic.Driver.Nerves.Touch do
 
   ## Calibration
 
-  Calibration maps the resolution/coordinates of the touch screen to the 
+  Calibration maps the resolution/coordinates of the touch screen to the
   coordinates and scale of the display. On the official Raspberry Pi
   7" touch screen, then are the same, so the mapping is easy (1.0).
 
@@ -198,12 +198,22 @@ defmodule Scenic.Driver.Nerves.Touch do
   # If it is found, connect and start working for real
   def handle_info({:init_driver, requested_device}, state) do
     InputEvent.enumerate()
-    |> Enum.find_value(fn {event, device_name} ->
-      if device_name =~ requested_device do
-        event
-      else
-        nil
-      end
+    |> Enum.find_value(fn
+      # input_event 0.3.1
+      {event, device_name} when is_binary(device_name) ->
+        if device_name =~ requested_device do
+          event
+        else
+          nil
+        end
+
+      # input_event >= 0.4.0
+      {event, info} when is_map(info) ->
+        if info.name =~ requested_device do
+          event
+        else
+          nil
+        end
     end)
     |> case do
       nil ->
