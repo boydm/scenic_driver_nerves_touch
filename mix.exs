@@ -2,7 +2,7 @@ defmodule ScenicDriverNervesTouch.MixProject do
   use Mix.Project
 
   @app_name :scenic_driver_nerves_touch
-  @version "0.9.1"
+  @version "0.10.0"
   @github "https://github.com/boydm/scenic_driver_nerves_rpi"
 
   def project do
@@ -27,8 +27,8 @@ defmodule ScenicDriverNervesTouch.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:input_event, "~> 0.3"},
-      {:scenic, "~> 0.9"},
+      {:input_event, "~> 0.4"},
+      {:scenic, "~> 0.10"},
       {:ex_doc, "~> 0.19", only: [:dev, :test], runtime: false}
     ]
   end
