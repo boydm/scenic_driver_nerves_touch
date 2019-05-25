@@ -44,7 +44,7 @@ defmodule Scenic.Driver.Nerves.Touch do
                 module: Scenic.Driver.Nerves.Touch,
                 opts: [
                   device: "FT5406 memory based driver",
-                  calibration: {{1,0,0},{1,0,0}}
+                  calibration: {{1,0,0},{0,1,0}},
                 ],
               }
             ]
@@ -89,7 +89,7 @@ defmodule Scenic.Driver.Nerves.Touch do
   by the calibration data via the formula
 
       final_x = x * ax + y * bx + dx
-      final_y = y * ay + x * by + dy
+      final_y = x * ay + y * by + dy
 
   See [Calibration in touch-screen systems](http://www.ti.com/lit/an/slyt277/slyt277.pdf) for more information.
 
@@ -98,7 +98,7 @@ defmodule Scenic.Driver.Nerves.Touch do
 
   The calibration is this part of the configuration
 
-      calibration: {{1,0,0},{1,0,0}}
+      calibration: {{1,0,0},{0,1,0}}
   """
 
   use Scenic.ViewPort.Driver
@@ -521,7 +521,7 @@ defmodule Scenic.Driver.Nerves.Touch do
   defp project_pos({x, y}, %{calibration: {{ax, bx, dx}, {ay, by, dy}}}) do
     {
       x * ax + y * bx + dx,
-      y * ay + x * by + dy
+      x * ay + y * by + dy
     }
   end
 
