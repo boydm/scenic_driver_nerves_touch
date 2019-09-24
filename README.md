@@ -6,7 +6,7 @@ So far only tested on Raspberry Pi 3 devices. In other words, it is still early
 days for this driver. There will probably be changes in the future. Especially
 regarding multi-touch.
 
-For now, the events coming to a scene via the touch driver look like the 
+For now, the events coming to a scene via the touch driver look like the
 same cursor oriented events that come from glfw with a mouse.
 
 ## Installation
@@ -36,7 +36,7 @@ to the driver list in your ViewPort's config.exs file.
               module: Scenic.Driver.Nerves.Touch,
               opts: [
                 device: "FT5406 memory based driver",
-                calibration: {{1,0,0},{1,0,0}}
+                calibration: {{1,0,0},{0,1,0}}
               ],
             }
           ]
@@ -63,7 +63,7 @@ The device name is this part of the configuration
 
 ## Calibration
 
-Calibration maps the resolution/coordinates of the touch screen to the 
+Calibration maps the resolution/coordinates of the touch screen to the
 coordinates and scale of the display. On the official Raspberry Pi
 7" touch screen, then are the same, so the mapping is easy (1.0).
 
@@ -81,7 +81,7 @@ When a location `{x, y}` comes in from the touch screen, it is projected
 by the calibration data via the formula
 
     final_x = x * ax + y * bx + dx
-    final_y = y * ay + x * by + dy
+    final_y = x * ay + y * by + dy
 
 See [Calibration in touch-screen systems](http://www.ti.com/lit/an/slyt277/slyt277.pdf) for more information.
 
@@ -90,4 +90,4 @@ a simple calibration by providing scale factors for `ax` and `ay`.
 
 The calibration is this part of the configuration
 
-    calibration: {{1,0,0},{1,0,0}}
+    calibration: {{1,0,0},{0,1,0}}
