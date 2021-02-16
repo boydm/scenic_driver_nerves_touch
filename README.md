@@ -61,6 +61,9 @@ The device name is this part of the configuration
 
     device: "FT5406 memory based driver",
 
+**Note:** If you're using `nerves_system_rpi3` version 1.13.1 or later the device name for the
+official Raspberry pi 7" touch screen is `raspberrypi-ts` instead of `FT5406 memory based driver`
+
 ## Calibration
 
 Calibration maps the resolution/coordinates of the touch screen to the
