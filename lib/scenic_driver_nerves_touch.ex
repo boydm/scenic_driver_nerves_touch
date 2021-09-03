@@ -1,10 +1,19 @@
 #
 #  Created by Boyd Multerer on June 18, 2018.
-#  Copyright © 2018 Kry10 Industries. All rights reserved.
+#  Heavily updated 2021/09/01
+#  Copyright 2018-2021 Kry10 Limited
 #
 #  track messages from a multi-touch driver, translate them, and send up to the viewport
 #
 defmodule Scenic.Driver.Nerves.Touch do
+  @opts_schema [
+    name: [type: {:or, [:atom, :string]}],
+    device: [required: true, type: :string],
+    limit_ms: [type: :non_neg_integer, default: 28],
+    device_retry_ms: [type: :pos_integer, default: 2000],
+    calibration: [required: true, type: {:custom, __MODULE__, :valid_calibration, [:calibration]}]
+  ]
+
   @moduledoc """
   # scenic_driver_nerves_touch
 
@@ -37,18 +46,18 @@ defmodule Scenic.Driver.Nerves.Touch do
             size: {800, 480},
             default_scene: {Sample.Scene.Simple, nil},
             drivers: [
-              %{
+              [
                 module: Scenic.Driver.Nerves.Rpi,
-              },
-              %{
+              ],
+              [
                 module: Scenic.Driver.Nerves.Touch,
-                opts: [
-                  device: "FT5406 memory based driver",
-                  calibration: {{1,0,0},{0,1,0}},
-                ],
-              }
+                device: "FT5406 memory based driver",
+                calibration: {{1,0,0},{0,1,0}},
+              ],
             ]
           }
+
+  Supported options:\n#{NimbleOptions.docs(@opts_schema)}
 
   ## Device Name
 
@@ -101,17 +110,31 @@ defmodule Scenic.Driver.Nerves.Touch do
       calibration: {{1,0,0},{0,1,0}}
   """
 
-  use Scenic.ViewPort.Driver
-  alias Scenic.ViewPort
-  # alias :mnesia, as: Mnesia
+  use Scenic.Driver
 
   require Logger
 
-  # import IEx
+  def valid_calibration({{ax, bx, dx}, {ay, by, dy}} = c, _)
+      when is_number(ax) and is_number(bx) and is_number(dx) and
+             is_number(ay) and is_number(by) and is_number(dy) do
+    {:ok, c}
+  end
 
-  # @port  '/scenic_driver_rpi_touch'
+  def valid_calibration(data, name) do
+    {
+      :error,
+      """
+      #{IO.ANSI.red()}#{__MODULE__}: Invalid #{inspect(name)} option.
+      Must be in the format of {{ax, bx, dx},{ay, by, dy}} where all values are numbers.
+      Example for the standard pi 7" touchscreen: {{1,0,0},{0,1,0}}
+      #{IO.ANSI.yellow()}Received: #{inspect(data)}
+      #{IO.ANSI.default_color()}
+      """
+    }
+  end
 
-  @init_retry_ms 400
+  @impl Scenic.Driver
+  def validate_opts(opts), do: NimbleOptions.validate(opts, @opts_schema)
 
   # ============================================================================
   # client callable api
@@ -124,70 +147,33 @@ defmodule Scenic.Driver.Nerves.Touch do
   # ============================================================================
   # startup
 
-  def init(viewport, {_, _} = screen_size, config) do
-    device =
-      case config[:device] do
-        device when is_bitstring(device) ->
-          Process.send(self(), {:init_driver, device}, [])
-          device
+  @impl Scenic.Driver
+  def init(driver, opts) do
+    Logger.info("#{inspect(__MODULE__)}: start: #{inspect(opts)}")
 
-        _ ->
-          msg =
-            "Scenic.Driver.Nerves.Touch requires a device option to start up\r\n" <>
-              "The named device must reference a valid driver on your target system\r\n" <>
-              "The following works with a raspberry pi with the standard 7 inch touch screen...\r\n" <>
-              "%{\r\n" <>
-              "  module: Scenic.Driver.Nerves.Touch,\r\n" <>
-              "  opts: [device: \"FT5406 memory based driver\"],\r\n" <> "}"
+    device = opts[:device]
+    Process.send(self(), :init_driver, [])
 
-          Logger.error(msg)
-          nil
-      end
+    driver =
+      assign(driver,
+        device: device,
+        event_path: nil,
+        event_pid: nil,
+        touch: false,
+        position: {0, 0},
+        abs_x: 0,
+        abs_y: 0,
+        # slot: 0,
+        # fingers: %{},
+        # mouse_x: nil,
+        # mouse_y: nil,
+        # mouse_event: nil,
+        device_retry_ms: opts[:device_retry_ms],
+        calibration: opts[:calibration]
+      )
 
-    calibration =
-      case config[:calibration] do
-        nil ->
-          nil
-
-        {
-          {ax, bx, dx},
-          {ay, by, dy}
-        } = calib
-        when is_number(ax) and is_number(bx) and is_number(dx) and is_number(ay) and is_number(by) and
-               is_number(dy) ->
-          calib
-
-        _ ->
-          msg =
-            "Invalid touch calibration in driver config\r\n" <>
-              "Must be a tuple in the form of {{ax, bx, dx}, {ay, by, dy}}\r\n" <>
-              "See documentation for details"
-
-          Logger.error(msg)
-          nil
-      end
-
-    state = %{
-      device: device,
-      event_path: nil,
-      event_pid: nil,
-      viewport: viewport,
-      slot: 0,
-      touch: false,
-      fingers: %{},
-      mouse_x: nil,
-      mouse_y: nil,
-      mouse_event: nil,
-      config: config,
-      calibration: calibration,
-      screen_size: screen_size
-    }
-
-    {:ok, state}
+    {:ok, driver}
   end
-
-  # ============================================================================
-  def handle_call(_msg, _from, state), do: {:reply, :e_no_impl, state}
 
   # ============================================================================
 
@@ -196,12 +182,13 @@ defmodule Scenic.Driver.Nerves.Touch do
   # Enumerate the events/device pairs and look for the requested device.
   # If it is NOT found, log a warning and try again later (it might not be loaded yet)
   # If it is found, connect and start working for real
-  def handle_info({:init_driver, requested_device}, state) do
+  @impl GenServer
+  def handle_info(:init_driver, %{assigns: %{device: device}} = driver) do
     InputEvent.enumerate()
     |> Enum.find_value(fn
       # input_event 0.3.1
       {event, device_name} when is_binary(device_name) ->
-        if device_name =~ requested_device do
+        if device_name =~ device do
           event
         else
           nil
@@ -209,7 +196,7 @@ defmodule Scenic.Driver.Nerves.Touch do
 
       # input_event >= 0.4.0
       {event, info} when is_map(info) ->
-        if info.name =~ requested_device do
+        if info.name =~ device do
           event
         else
           nil
@@ -217,313 +204,318 @@ defmodule Scenic.Driver.Nerves.Touch do
     end)
     |> case do
       nil ->
-        Logger.warn("Device not found: #{inspect(requested_device)}")
+        Logger.warn("#{inspect(__MODULE__)}: Device not found: #{inspect(device)}")
         # not found. Try again later
-        Process.send_after(self(), {:init_driver, requested_device}, @init_retry_ms)
-        {:noreply, state}
+        {:ok, retry_ms} = fetch(driver, :device_retry_ms)
+        Process.send_after(self(), :init_driver, retry_ms)
+        {:noreply, driver}
 
       event ->
         # start listening for input messages on the event file
         {:ok, pid} = InputEvent.start_link(event)
-        # start post-init calibration check
-        # Process.send(self(), :post_init, [])
-        # Process.send(self(), {:post_init, 20}, [])
-
-        {:noreply, %{state | event_pid: pid, event_path: event}}
+        {:noreply, assign(driver, event_pid: pid, event_path: event)}
     end
   end
 
   # --------------------------------------------------------
-  # We have connected to the touch driver. See if there is a stored
-  # calibration override
-  # def handle_info( {:post_init, 0}, state ), do: {:noreply, state}
-  # def handle_info( :post_init, %{
-  # viewport:     vp,
-  # config:       config,
-  # calibration:  calibration,
-  # screen_size: {width, height}
-  # } = state ) do
-  # if there ls a locally stored calibration record, use that instead of the
-  # default one that was passed into config. Measured beats default
-
-  # Find the static monitor. Try again later if there isn't one.
-  #     {:ok, %{drivers: drivers}} = ViewPort.query_status(vp)
-  #     state = Enum.find(drivers, fn
-  #       {_pid, %{type: "Static Monitor"}} -> true
-  #       _ -> false
-  #     end)
-  #     |> case do
-  #       nil ->
-  #         # not found. Try again later
-  # IO.puts "try again later"
-  #         Process.send_after(self(), {:post_init, tries_left - 1}, @init_retry_ms)
-  #         state
-
-  #       %{width: width, height: height} ->
-  # pry()
-  #         Mnesia.start()
-  #         Mnesia.dirty_read({:touch_calibration, {width,height}})
-  #         |> case do
-  #           [] -> state
-  #           [{:touch_calibration, _, {{_,_,_},{_,_,_}} = calib}] ->
-  #             Map.put(state, :calibration, calib)
-  #           _ ->
-  #             # don't understand the stored calibration. Do nothing.
-  #             state
-  #         end
-
-  #       _ ->
-  #         # unknown monitor format. ignore it.
-  #         state
-  #     end
-
-  # pry()
-  #     Mnesia.start()
-  #     state = Mnesia.dirty_read({:touch_calibration, {width,height}})
-  #     |> case do
-  #       [] -> state
-  #       [{:touch_calibration, _, {{_,_,_},{_,_,_}} = calib}] ->
-  #         Map.put(state, :calibration, calib)
-  #       _ ->
-  #         # don't understand the stored calibration. Do nothing.
-  #         state
-  #     end
-  # pry()
-  #   {:noreply, state}
-  # end
-
-  # --------------------------------------------------------
   # first handling for the input events we care about
-  def handle_info({:input_event, source, events}, %{event_path: event_path} = state)
+  def handle_info(
+        {:input_event, source, events},
+        %{assigns: %{event_path: event_path}} = driver
+      )
       when source == event_path do
-    # IO.inspect(events)
-    state =
-      Enum.reduce(events, state, fn ev, s ->
-        ev_abs(ev, s)
-        |> simulate_mouse(ev)
-      end)
-      |> send_mouse()
-
-    {:noreply, state}
+    {:noreply, track_events(events, driver)}
   end
 
   # --------------------------------------------------------
-  def handle_info(msg, state) do
-    IO.puts("Unhandled info. msg: #{inspect(msg)}")
-    {:noreply, state}
+  def handle_info(_msg, driver) do
+    {:noreply, driver}
   end
 
   # ============================================================================
-  defp ev_abs(event, state)
+  # we only simulate a mouse for now, so use simplified single-finger logic
 
-  defp ev_abs({:ev_abs, :abs_mt_slot, slot}, state) do
-    %{state | slot: slot}
-  end
-
-  # stop tracking the current slot
-  defp ev_abs(
-         {:ev_abs, :abs_mt_tracking_id, -1},
-         %{
-           fingers: fingers,
-           slot: slot
-         } = state
+  defp track_events(
+         events,
+         %{assigns: %{touch: old_touch, position: old_position}} = driver
        ) do
-    %{state | fingers: Map.delete(fingers, slot)}
+    # first process the events so we have the latest state
+    driver = process_events(driver, events)
+    %{assigns: %{touch: new_touch, position: new_position}} = driver
+
+    # if the position changed, send cursor_pos
+    driver =
+      case new_position != old_position do
+        true -> send_input(driver, {:cursor_pos, new_position})
+        false -> driver
+      end
+
+    # if the button/touch state changed. send cursor_button
+    case new_touch do
+      ^old_touch -> driver
+      true -> send_input(driver, {:cursor_button, {0, :press, 0, new_position}})
+      false -> send_input(driver, {:cursor_button, {0, :release, 0, new_position}})
+    end
   end
 
-  # start tracking a slot
-  defp ev_abs(
-         {:ev_abs, :abs_mt_tracking_id, id},
-         %{
-           fingers: fingers,
-           slot: slot
-         } = state
-       ) do
-    fingers =
-      fingers
-      |> Map.put(slot, %{id: id})
+  defp process_events(%{assigns: %{calibration: calibration}} = driver, events) do
+    # process each individual event
+    driver = Enum.reduce(events, driver, &process_event(&1, &2))
 
-    %{state | fingers: fingers}
+    # transform the position into usable coordinates
+    position = {get(driver, :abs_x), get(driver, :abs_y)}
+    position = project_pos(position, calibration)
+    assign(driver, :position, position)
   end
 
-  # set the x position
-  defp ev_abs(
-         {:ev_abs, :abs_mt_position_x, x},
-         %{
-           fingers: fingers,
-           slot: slot
-         } = state
-       ) do
-    fingers = put_in(fingers, [slot, :x], x)
-    %{state | fingers: fingers}
+  defp process_event(event, driver) do
+    case event do
+      {:ev_abs, :abs_x, x} -> assign(driver, :abs_x, x)
+      {:ev_abs, :abs_y, y} -> assign(driver, :abs_y, y)
+      {:ev_key, :btn_touch, 1} -> assign(driver, :touch, true)
+      {:ev_key, :btn_touch, 0} -> assign(driver, :touch, false)
+      evt -> driver
+    end
   end
 
-  defp ev_abs(
-         {:ev_abs, :abs_mt_position_y, y},
-         %{
-           fingers: fingers,
-           slot: slot
-         } = state
-       ) do
-    fingers = put_in(fingers, [slot, :y], y)
-    %{state | fingers: fingers}
-  end
+  #   # ============================================================================
 
-  defp ev_abs(
-         {:ev_abs, :abs_mt_pressure, pressure},
-         %{
-           fingers: fingers,
-           slot: slot
-         } = state
-       ) do
-    fingers = put_in(fingers, [slot, :pressure], pressure)
-    %{state | fingers: fingers}
-  end
+  #   # like put_in, except it makes the intermediate maps as needed
+  #   @spec put_in_mk( map, list[atom], any ) :: map
+  #   defp put_in_mk( map, keys, value )
+  #   defp put_in_mk( %{} = map, [key], value ), do: Map.put( map, key, value )
+  #   defp put_in_mk( %{} = map, [key | tail], value ) do
+  #     inner_map = Map.get( map, key, %{} )
+  #       |> put_in_mk( tail, value )
+  #     Map.put( map, key, inner_map )
+  #   end
 
-  defp ev_abs(
-         {:ev_abs, :abs_mt_distance, distance},
-         %{
-           fingers: fingers,
-           slot: slot
-         } = state
-       ) do
-    fingers = put_in(fingers, [slot, :distance], distance)
-    %{state | fingers: fingers}
-  end
+  #   defp ev_abs(event, driver)
 
-  defp ev_abs(
-         {:ev_key, :btn_touch, 1},
-         %{
-           slot: _slot
-         } = state
-       ) do
-    %{state | touch: true}
-  end
+  #   defp ev_abs({:ev_abs, :abs_mt_slot, slot}, driver) do
+  #     assign( driver, slot: slot )
+  #   end
 
-  defp ev_abs(
-         {:ev_key, :btn_touch, 0},
-         %{
-           slot: _slot
-         } = state
-       ) do
-    %{state | touch: false}
-  end
+  #   # stop tracking the current slot
+  #   defp ev_abs(
+  #          {:ev_abs, :abs_mt_tracking_id, -1},
+  #          %{assigns: %{fingers: fingers, slot: slot}} = driver
+  #        ) do
+  #     assign( driver, fingers: Map.delete(fingers, slot) )
+  #   end
 
-  # if other ev types need to be handled, add them here
+  #   # start tracking a slot
+  #   defp ev_abs(
+  #          {:ev_abs, :abs_mt_tracking_id, id},
+  #          %{assigns: %{fingers: fingers, slot: slot}} = driver
+  #        ) do
+  #     fingers =
+  #       fingers
+  #       |> Map.put(slot, %{id: id})
+  #     assign( driver, fingers: fingers )
+  #   end
 
-  defp ev_abs(_msg, state) do
-    # IO.puts "EV unhandled: #{inspect(msg)}"
-    state
-  end
+  #   # set the x position
+  #   defp ev_abs(
+  #          {:ev_abs, :abs_x, x},
+  #          %{assigns: %{fingers: fingers, slot: slot}} = driver
+  #        ) do
+  # # Logger.warn("abs_x - fingers: #{inspect(fingers)}, slot: #{inspect(slot)}")
+  #     fingers = put_in_mk(fingers, [slot, :x], x)
+  # # Logger.warn("out - fingers: #{inspect(fingers)}")
+  #     assign( driver, fingers: fingers )
+  #   end
 
-  # ============================================================================
-  # translate raw events into simulated mouse state
+  #   defp ev_abs(
+  #          {:ev_abs, :abs_mt_position_x, x},
+  #          %{assigns: %{fingers: fingers, slot: slot}} = driver
+  #        ) do
+  #     fingers = put_in_mk(fingers, [slot, :x], x)
+  #     assign( driver, fingers: fingers )
+  #   end
 
-  defp simulate_mouse(state, ev)
+  #   # set the y position
+  #   defp ev_abs(
+  #          {:ev_abs, :abs_y, y},
+  #          %{assigns: %{fingers: fingers, slot: slot}} = driver
+  #        ) do
+  # # Logger.warn("abs_y - fingers: #{inspect(fingers)}, slot: #{inspect(slot)}")
+  #     fingers = put_in_mk(fingers, [slot, :y], y)
+  # # Logger.warn("out - fingers: #{inspect(fingers)}")
+  #     assign( driver, fingers: fingers )
+  #   end
 
-  defp simulate_mouse(
-         %{slot: 0} = state,
-         {:ev_abs, :abs_mt_tracking_id, -1}
-       ) do
-    %{state | mouse_event: :mouse_up}
-  end
+  #   defp ev_abs(
+  #          {:ev_abs, :abs_mt_position_y, y},
+  #          %{assigns: %{fingers: fingers, slot: slot}} = driver
+  #        ) do
+  #     fingers = put_in_mk(fingers, [slot, :y], y)
+  #     assign( driver, fingers: fingers )
+  #   end
 
-  defp simulate_mouse(
-         %{slot: 0} = state,
-         {:ev_abs, :abs_mt_tracking_id, _id}
-       ) do
-    %{state | mouse_event: :mouse_down}
-  end
+  #   defp ev_abs(
+  #          {:ev_abs, :abs_mt_pressure, pressure},
+  #          %{assigns: %{fingers: fingers, slot: slot}} = driver
+  #        ) do
+  #     fingers = put_in_mk(fingers, [slot, :pressure], pressure)
+  #     assign( driver, fingers: fingers )
+  #   end
 
-  defp simulate_mouse(
-         %{slot: 0, mouse_event: nil} = state,
-         {:ev_abs, :abs_mt_position_x, x}
-       ) do
-    %{state | mouse_event: :mouse_move, mouse_x: x}
-  end
+  #   defp ev_abs(
+  #          {:ev_abs, :abs_mt_distance, distance},
+  #          %{assigns: %{fingers: fingers, slot: slot}} = driver
+  #        ) do
+  #     fingers = put_in_mk(fingers, [slot, :distance], distance)
+  #     assign( driver, fingers: fingers )
+  #   end
 
-  defp simulate_mouse(
-         %{slot: 0} = state,
-         {:ev_abs, :abs_mt_position_x, x}
-       ) do
-    %{state | mouse_x: x}
-  end
+  #   defp ev_abs(
+  #          {:ev_key, :btn_touch, 1},
+  #          %{assigns: %{slot: _slot}} = driver
+  #        ) do
+  #     assign( driver, touch: true )
+  #   end
 
-  defp simulate_mouse(
-         %{slot: 0, mouse_event: nil} = state,
-         {:ev_abs, :abs_mt_position_y, y}
-       ) do
-    %{state | mouse_event: :mouse_move, mouse_y: y}
-  end
+  #   defp ev_abs(
+  #          {:ev_key, :btn_touch, 0},
+  #          %{assigns: %{slot: _slot}} = driver
+  #        ) do
+  #     assign( driver, touch: false )
+  #   end
 
-  defp simulate_mouse(
-         %{slot: 0} = state,
-         {:ev_abs, :abs_mt_position_y, y}
-       ) do
-    %{state | mouse_y: y}
-  end
+  #   # if other ev types need to be handled, add them here
 
-  # ignore everything else
-  defp simulate_mouse(state, _), do: state
+  #   defp ev_abs(msg, driver) do
+  # # Logger.warn("#{inspect(__MODULE__)}: Unhandled ev_abs: #{inspect(msg)}")
+  #     # IO.puts "EV unhandled: #{inspect(msg)}"
+  #     driver
+  #   end
 
-  # ============================================================================
-  # send simulated mouse events after handling a batch of raw events
+  #   # ============================================================================
+  #   # translate raw events into simulated mouse state
 
-  defp send_mouse(state)
+  #   defp simulate_mouse(driver, ev)
 
-  # send cursor_button press. no modifiers
-  defp send_mouse(
-         %{
-           viewport: viewport,
-           mouse_x: x,
-           mouse_y: y,
-           mouse_event: :mouse_down
-         } = state
-       )
-       when is_number(x) and is_number(y) do
-    # IO.puts "MOUSE press: #{inspect({x,y})}"
-    pos = project_pos({x, y}, state)
-    ViewPort.input(viewport, {:cursor_button, {:left, :press, 0, pos}})
-    %{state | mouse_event: nil}
-  end
+  #   defp simulate_mouse(
+  #          %{assigns: %{slot: 0}} = driver,
+  #          {:ev_abs, :abs_mt_tracking_id, -1} = msg
+  #        ) do
+  # # Logger.warn("#{inspect(__MODULE__)}: #{inspect(msg)}")
+  #     assign( driver, mouse_event: :mouse_up )
+  #   end
 
-  # send cursor_button release. no modifiers
-  defp send_mouse(%{viewport: viewport, mouse_x: x, mouse_y: y, mouse_event: :mouse_up} = state)
-       when is_number(x) and is_number(y) do
-    # IO.puts "MOUSE release: #{inspect({x,y})}"
-    pos = project_pos({x, y}, state)
-    ViewPort.input(viewport, {:cursor_button, {:left, :release, 0, pos}})
-    %{state | mouse_x: nil, mouse_y: nil, mouse_event: nil}
-  end
+  #   defp simulate_mouse(
+  #          %{assigns: %{slot: 0}} = driver,
+  #          {:ev_abs, :abs_mt_tracking_id, _id} = msg
+  #        ) do
+  # # Logger.warn("#{inspect(__MODULE__)}: #{inspect(msg)}")
+  #     assign( driver, mouse_event: :mouse_down )
+  #   end
 
-  # send cursor_pos. no modifiers
-  defp send_mouse(%{viewport: viewport, mouse_x: x, mouse_y: y, mouse_event: :mouse_move} = state)
-       when is_number(x) and is_number(y) do
-    # IO.puts "MOUSE move: #{inspect({x,y})}"
-    pos = project_pos({x, y}, state)
-    ViewPort.input(viewport, {:cursor_pos, pos})
-    %{state | mouse_event: nil}
-  end
+  #   defp simulate_mouse(
+  #          %{assigns: %{slot: 0, mouse_event: nil}} = driver,
+  #          {:ev_abs, :abs_mt_position_x, x}
+  #        ) do
+  #     assign( driver, mouse_event: :mouse_move, mouse_x: x )
+  #   end
 
-  # generic mouse_up catch-all. For some reason a x or y was never set, so
-  # this is invalid and the mouse state should be cleared
-  defp send_mouse(%{mouse_event: :mouse_up} = state) do
-    %{state | mouse_x: nil, mouse_y: nil, mouse_event: nil}
-  end
+  #   defp simulate_mouse(
+  #          %{assigns: %{slot: 0, mouse_event: nil}} = driver,
+  #          {:ev_abs, :abs_x, x}
+  #        ) do
+  #     assign( driver, mouse_event: :mouse_move, mouse_x: x )
+  #   end
 
-  # fall-through. do nothing
-  defp send_mouse(state) do
-    state
-  end
+  #   defp simulate_mouse(
+  #          %{assigns: %{slot: 0}} = driver,
+  #          {:ev_abs, :abs_mt_position_x, x}
+  #        ) do
+  #     assign( driver, mouse_x: x )
+  #   end
+
+  #   defp simulate_mouse(
+  #          %{assigns: %{slot: 0, mouse_event: nil}} = driver,
+  #          {:ev_abs, :abs_mt_position_y, y}
+  #        ) do
+  #     assign( driver, mouse_event: :mouse_move, mouse_y: y )
+  #   end
+
+  #   defp simulate_mouse(
+  #          %{assigns: %{slot: 0, mouse_event: nil}} = driver,
+  #          {:ev_abs, :abs_y, y}
+  #        ) do
+  #     assign( driver, mouse_event: :mouse_move, mouse_y: y )
+  #   end
+
+  #   defp simulate_mouse(
+  #          %{assigns: %{slot: 0}} = driver,
+  #          {:ev_abs, :abs_mt_position_y, y}
+  #        ) do
+  #     assign( driver, mouse_y: y )
+  #   end
+
+  #   # ignore everything else
+  #   defp simulate_mouse(driver, _), do: driver
+
+  #   # ============================================================================
+  #   # send simulated mouse events after handling a batch of raw events
+
+  #   defp send_mouse(driver)
+
+  #   # send cursor_button press. no modifiers
+  #   defp send_mouse(
+  #     %{assigns: %{mouse_x: x, mouse_y: y, mouse_event: :mouse_down } } = driver
+  #   ) when is_number(x) and is_number(y) do
+  #     # IO.puts "MOUSE press: #{inspect({x,y})}"
+  #     pos = project_pos({x, y}, driver)
+  #     send_input(driver, {:cursor_button, {:left, :press, 0, pos}})
+  #     assign( driver, mouse_event: nil )
+  #   end
+
+  #   # send cursor_button release. no modifiers
+  #   defp send_mouse(
+  #     %{assigns: %{mouse_x: x, mouse_y: y, mouse_event: :mouse_up}} = driver
+  #   ) when is_number(x) and is_number(y) do
+  #     # IO.puts "MOUSE release: #{inspect({x,y})}"
+  #     pos = project_pos({x, y}, driver)
+  #     send_input(driver, {:cursor_button, {:left, :release, 0, pos}})
+  #     assign( driver, mouse_x: nil, mouse_y: nil, mouse_event: nil )
+  #   end
+
+  #   # send cursor_pos. no modifiers
+  #   defp send_mouse(
+  #     %{assigns: %{mouse_x: x, mouse_y: y, mouse_event: :mouse_move}} = driver
+  #   ) when is_number(x) and is_number(y) do
+  #     # IO.puts "MOUSE move: #{inspect({x,y})}"
+  #     pos = project_pos({x, y}, driver)
+  #     send_input(driver, {:cursor_pos, pos})
+  #     assign( driver, mouse_event: nil )
+  #   end
+
+  #   # generic mouse_up catch-all. For some reason a x or y was never set, so
+  #   # this is invalid and the mouse state should be cleared
+  #   defp send_mouse(%{assigns: %{mouse_event: :mouse_up}} = driver) do
+  #     assign( driver, mouse_x: nil, mouse_y: nil, mouse_event: nil )
+  #   end
+
+  #   # fall-through. do nothing
+  #   defp send_mouse(driver), do: driver
 
   # --------------------------------------------------------
   # project the measured x value by the calibration data to get the screen x
-  defp project_pos({x, y}, %{calibration: {{ax, bx, dx}, {ay, by, dy}}}) do
+  # defp project_pos({x, y}, %{assigns: %{calibration: {{ax, bx, dx}, {ay, by, dy}} }}) do
+  #   {
+  #     x * ax + y * bx + dx,
+  #     x * ay + y * by + dy
+  #   }
+  # end
+
+  defp project_pos({x, y}, {{ax, bx, dx}, {ay, by, dy}}) do
     {
       x * ax + y * bx + dx,
       x * ay + y * by + dy
     }
   end
 
-  defp project_pos(pos, _), do: pos
+  # defp project_pos(pos, _), do: pos
 end
