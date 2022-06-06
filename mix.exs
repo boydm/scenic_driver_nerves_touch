@@ -28,7 +28,7 @@ defmodule ScenicDriverNervesTouch.MixProject do
   defp deps do
     [
       {:input_event, "~> 0.4"},
-      {:scenic, "~> 0.10"},
+      {:scenic, "~> 0.11.0-beta.0"},
       {:ex_doc, "~> 0.19", only: [:dev, :test], runtime: false}
     ]
   end

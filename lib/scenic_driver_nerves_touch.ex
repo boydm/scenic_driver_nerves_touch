@@ -253,8 +253,8 @@ defmodule Scenic.Driver.Nerves.Touch do
     # if the button/touch state changed. send cursor_button
     case new_touch do
       ^old_touch -> driver
-      true -> send_input(driver, {:cursor_button, {0, :press, 0, new_position}})
-      false -> send_input(driver, {:cursor_button, {0, :release, 0, new_position}})
+      true -> send_input(driver, {:cursor_button, {:btn_left, 1, [], new_position}})
+      false -> send_input(driver, {:cursor_button, {:btn_left, 0, [], new_position}})
     end
   end
 
