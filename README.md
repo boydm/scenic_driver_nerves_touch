@@ -29,16 +29,15 @@ to the driver list in your ViewPort's config.exs file.
           size: {800, 480},
           default_scene: {Sample.Scene.Simple, nil},
           drivers: [
-            %{
-              module: Scenic.Driver.Nerves.Rpi,
-            },
-            %{
+            [
+              module: Scenic.Driver.Local,
+              position: [scaled: true, centered: true, orientation: :normal]
+            ],
+            [
               module: Scenic.Driver.Nerves.Touch,
-              opts: [
-                device: "FT5406 memory based driver",
-                calibration: {{1,0,0},{0,1,0}}
-              ],
-            }
+              device: "raspberrypi-ts",
+              calibration: {{1, 0, 0}, {0, 1, 0}}
+            ]
           ]
         }
 
