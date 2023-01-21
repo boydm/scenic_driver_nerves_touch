@@ -1,3 +1,8 @@
+> **Warning**
+> Scenic Driver Nerves Touch is deprecated and is no longer needed if you're
+> using [Scenic Driver
+> Local](https://github.com/ScenicFramework/scenic_driver_local)
+
 # scenic_driver_nerves_touch
 
 The main driver for receiving touch input on Nerves devices.
